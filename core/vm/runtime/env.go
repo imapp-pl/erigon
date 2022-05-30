@@ -17,9 +17,9 @@
 package runtime
 
 import (
+	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/vm"
-	"github.com/ledgerwatch/erigon/ethdb"
 )
 
 func NewEnv(cfg *Config) *vm.EVM {
@@ -29,10 +29,11 @@ func NewEnv(cfg *Config) *vm.EVM {
 	}
 
 	blockContext := vm.BlockContext{
-		CanTransfer:     core.CanTransfer,
-		Transfer:        core.Transfer,
-		GetHash:         cfg.GetHashFn,
-		ContractHasTEVM: ethdb.GetHasTEVM(cfg.kv),
+		CanTransfer: core.CanTransfer,
+		Transfer:    core.Transfer,
+		GetHash:     cfg.GetHashFn,
+		//imapp_benchmark: disable TEVM for all storages
+		ContractHasTEVM: func(common.Hash) (bool, error) { return false, nil },
 		Coinbase:        cfg.Coinbase,
 		BlockNumber:     cfg.BlockNumber.Uint64(),
 		Time:            cfg.Time.Uint64(),
