@@ -17,7 +17,9 @@
 package vm
 
 import (
+	"fmt"
 	"hash"
+	"io"
 	"sync/atomic"
 
 	"github.com/ledgerwatch/erigon/common"
@@ -26,17 +28,70 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
+type InstrumenterLog struct {
+	Pc          uint64 `json:"pc"`
+	Op          OpCode `json:"op"`
+	TimeNs      int64  `json:"timeNs"`
+	TimerTimeNs int64  `json:"timerTimeNs"`
+}
+
+type InstrumenterLogger struct {
+	Logs      []InstrumenterLog
+	StartTime int64
+
+	// worker fields, just to avoid reallocation of local vars
+	OpCodeDuration         int64
+	TimerDuration          int64
+	TotalExecutionDuration int64
+	Log                    InstrumenterLog
+}
+
+// NewInstrumenterLogger returns a new logger
+func NewInstrumenterLogger() *InstrumenterLogger {
+	logger := &InstrumenterLogger{}
+	return logger
+}
+
+// WriteTrace writes a formatted trace to the given writer
+func WriteInstrumentation(writer io.Writer, logs []InstrumenterLog) {
+	for _, log := range logs {
+		fmt.Fprintf(writer, "%-16spc=%08d time_ns=%v timer_time_ns=%v", log.Op, log.Pc, log.TimeNs, log.TimerTimeNs)
+		fmt.Fprintln(writer)
+	}
+}
+
+func WriteCSVInstrumentationTotal(writer io.Writer, instrumenter *InstrumenterLogger, runId int) {
+	fmt.Fprintf(writer, "%v,%v,%v", runId, instrumenter.TotalExecutionDuration, instrumenter.TimerDuration)
+	fmt.Fprintln(writer)
+}
+
+func WriteCSVInstrumentationAll(writer io.Writer, logs []InstrumenterLog, runId int) {
+	// CSV header must be in sync with these fields here :(, but it's in measurements.py
+	for instructionId, log := range logs {
+		fmt.Fprintf(writer, "%v,%v,%v,%v", runId, instructionId, log.TimeNs, log.TimerTimeNs)
+		fmt.Fprintln(writer)
+	}
+}
+
+func (instrumenter *InstrumenterLogger) tick() {
+	instrumenter.TotalExecutionDuration = runtimeNano()
+	instrumenter.TimerDuration = runtimeNano()
+	instrumenter.TimerDuration -= instrumenter.TotalExecutionDuration
+	instrumenter.TotalExecutionDuration -= instrumenter.StartTime
+}
+
 // Config are the configuration options for the Interpreter
 type Config struct {
 	Debug         bool   // Enables debugging
 	Tracer        Tracer // Opcode logger
-	NoRecursion   bool   // Disables call, callcode, delegate call and create
-	NoBaseFee     bool   // Forces the EIP-1559 baseFee to 0 (needed for 0 price calls)
-	SkipAnalysis  bool   // Whether we can skip jumpdest analysis based on the checked history
-	TraceJumpDest bool   // Print transaction hashes where jumpdest analysis was useful
-	NoReceipts    bool   // Do not calculate receipts
-	ReadOnly      bool   // Do no perform any block finalisation
-	EnableTEMV    bool   // true if execution with TEVM enable flag
+	Instrumenter  *InstrumenterLogger
+	NoRecursion   bool // Disables call, callcode, delegate call and create
+	NoBaseFee     bool // Forces the EIP-1559 baseFee to 0 (needed for 0 price calls)
+	SkipAnalysis  bool // Whether we can skip jumpdest analysis based on the checked history
+	TraceJumpDest bool // Print transaction hashes where jumpdest analysis was useful
+	NoReceipts    bool // Do not calculate receipts
+	ReadOnly      bool // Do no perform any block finalisation
+	EnableTEMV    bool // true if execution with TEVM enable flag
 
 	ExtraEips []int // Additional EIPS that are to be enabled
 }
@@ -232,6 +287,10 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			}
 		}()
 	}
+
+	// start timer
+	in.cfg.Instrumenter.StartTime = runtimeNano()
+
 	// The Interpreter main run loop (contextual). This loop runs until either an
 	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
 	// the execution of one of the operations or until the done flag is set by the
@@ -324,15 +383,39 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 
 		switch {
 		case err != nil:
+			// BEGIN COPY PASTE BLOCK <shame>
+			in.cfg.Instrumenter.TotalExecutionDuration = runtimeNano()
+			in.cfg.Instrumenter.TimerDuration = runtimeNano()
+			in.cfg.Instrumenter.TimerDuration -= in.cfg.Instrumenter.TotalExecutionDuration
+			in.cfg.Instrumenter.TotalExecutionDuration -= in.cfg.Instrumenter.StartTime
+			// END COPY PASTE BLOCK </shame>
 			return nil, err
 		case operation.reverts:
+			// BEGIN COPY PASTE BLOCK <shame>
+			in.cfg.Instrumenter.TotalExecutionDuration = runtimeNano()
+			in.cfg.Instrumenter.TimerDuration = runtimeNano()
+			in.cfg.Instrumenter.TimerDuration -= in.cfg.Instrumenter.TotalExecutionDuration
+			in.cfg.Instrumenter.TotalExecutionDuration -= in.cfg.Instrumenter.StartTime
+			// END COPY PASTE BLOCK </shame>
 			return res, ErrExecutionReverted
 		case operation.halts:
+			// BEGIN COPY PASTE BLOCK <shame>
+			in.cfg.Instrumenter.TotalExecutionDuration = runtimeNano()
+			in.cfg.Instrumenter.TimerDuration = runtimeNano()
+			in.cfg.Instrumenter.TimerDuration -= in.cfg.Instrumenter.TotalExecutionDuration
+			in.cfg.Instrumenter.TotalExecutionDuration -= in.cfg.Instrumenter.StartTime
+			// END COPY PASTE BLOCK </shame>
 			return res, nil
 		case !operation.jumps:
 			pc++
 		}
 	}
+	// BEGIN COPY PASTE BLOCK <shame>
+	in.cfg.Instrumenter.TotalExecutionDuration = runtimeNano()
+	in.cfg.Instrumenter.TimerDuration = runtimeNano()
+	in.cfg.Instrumenter.TimerDuration -= in.cfg.Instrumenter.TotalExecutionDuration
+	in.cfg.Instrumenter.TotalExecutionDuration -= in.cfg.Instrumenter.StartTime
+	// END COPY PASTE BLOCK </shame>
 	return nil, nil
 }
 
