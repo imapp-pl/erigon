@@ -41,6 +41,7 @@ type precompiledFailureTest struct {
 	Input         string
 	ExpectedError string
 	Name          string
+	NoBenchmark     bool // Benchmark primarily the worst-cases
 }
 
 // allPrecompiles does not map to the actual set of precompiles, as it also contains
@@ -193,6 +194,45 @@ func benchmarkPrecompiled(addr string, test precompiledTest, bench *testing.B) {
 	})
 }
 
+func benchmarkPrecompiledFailure(addr string, test precompiledFailureTest, bench *testing.B) {
+	if test.NoBenchmark {
+		return
+	}
+	p := allPrecompiles[common.HexToAddress(addr)]
+	in := common.Hex2Bytes(test.Input)
+	reqGas := p.RequiredGas(in)
+
+	var (
+		err  error
+		data = make([]byte, len(in))
+	)
+
+	bench.Run(fmt.Sprintf("%s-Gas=%d", test.Name, reqGas), func(bench *testing.B) {
+		bench.ReportAllocs()
+		start := time.Now()
+		bench.ResetTimer()
+		for i := 0; i < bench.N; i++ {
+			copy(data, in)
+			_, _, err = RunPrecompiledContract(p, data, reqGas)
+		}
+		bench.StopTimer()
+		elapsed := uint64(time.Since(start))
+		if elapsed < 1 {
+			elapsed = 1
+		}
+		gasUsed := reqGas * uint64(bench.N)
+		bench.ReportMetric(float64(reqGas), "gas/op")
+		// Keep it as uint64, multiply 100 to get two digit float later
+		mgasps := (100 * 1000 * gasUsed) / elapsed
+		bench.ReportMetric(float64(mgasps)/100, "mgas/s")
+		//Check if it is correct
+		if err == nil {
+			bench.Error()
+			return
+		}
+	})
+}
+
 // Benchmarks the sample inputs from the ECRECOVER precompile.
 func BenchmarkPrecompiledEcrecover(bench *testing.B) {
 	t := precompiledTest{
@@ -202,6 +242,17 @@ func BenchmarkPrecompiledEcrecover(bench *testing.B) {
 	}
 	benchmarkPrecompiled("01", t, bench)
 }
+
+// Benchmarks the sample inputs from the ECRECOVER precompile.
+func BenchmarkPrecompiledEcrecoverValidKey(bench *testing.B) {
+	t := precompiledTest{
+		Input:    "18c547e4f7b0f325ad1e56f57e26c745b09a3e503d86e00e5255ff7f715d3d1c000000000000000000000000000000000000000000000000000000000000001c73b1693892219d736caba55bdb67216e485557ea6b6af75f37096c9aa6a5a75feeb940b1d03b21e36b0e47e79769f095fe2ab855bd91e3a38756b7d75a9c4549",
+		Expected: "000000000000000000000000a94f5374fce5edbc8e2a8697c15331677e6ebf0b",
+		Name:     "ValidKey",
+	}
+	benchmarkPrecompiled("01", t, bench)
+}
+
 
 // Benchmarks the sample inputs from the SHA256 precompile.
 func BenchmarkPrecompiledSha256(bench *testing.B) {
@@ -304,6 +355,16 @@ func benchJson(name, addr string, b *testing.B) {
 	}
 }
 
+func benchJsonFail(name, addr string, b *testing.B) {
+	tests, err := loadJsonFail(name)
+	if err != nil {
+		b.Fatal(err)
+	}
+	for _, test := range tests {
+		benchmarkPrecompiledFailure(addr, test, b)
+	}
+}
+
 func TestPrecompiledBLS12381G1Add(t *testing.T)      { testJson("blsG1Add", "0a", t) }
 func TestPrecompiledBLS12381G1Mul(t *testing.T)      { testJson("blsG1Mul", "0b", t) }
 func TestPrecompiledBLS12381G1MultiExp(t *testing.T) { testJson("blsG1MultiExp", "0c", t) }
@@ -395,3 +456,7 @@ func BenchmarkPrecompiledBLS12381G2MultiExpWorstCase(b *testing.B) {
 }
 
 func TestPrecompiledPointEvaluation(t *testing.T) { testJson("pointEvaluation", "14", t) }
+
+func BenchmarkPrecompiledPointEvaluation(b *testing.B) { benchJson("pointEvaluation", "14", b) }
+
+func BenchmarkPrecompiledPointEvaluationFail(b *testing.B) { benchJsonFail("pointEvaluation", "14", b) }

@@ -34,7 +34,7 @@ GO_FLAGS += -ldflags "-X ${PACKAGE}/params.GitCommit=${GIT_COMMIT} -X ${PACKAGE}
 
 GOBUILD = $(CGO_CFLAGS) $(GO) build $(GO_FLAGS)
 GO_DBG_BUILD = $(GO) build $(GO_FLAGS) -tags $(BUILD_TAGS),debug -gcflags=all="-N -l"  # see delve docs
-GOTEST = $(CGO_CFLAGS) GODEBUG=cgocheck=0 $(GO) test $(GO_FLAGS) ./... -p 2
+GOTEST = $(CGO_CFLAGS) GODEBUG=cgocheck=0 $(GO) test ./core/vm -bench=BenchmarkPrecompiled* -run=^a -v $(GO_FLAGS) ./... -p 2
 
 default: all
 
@@ -139,7 +139,7 @@ db-tools:
 
 ## test:                              run unit tests with a 50s timeout
 test:
-	$(GOTEST) --timeout 50s
+	$(GOTEST)
 
 test3:
 	$(GOTEST) --timeout 50s -tags $(BUILD_TAGS),erigon3
@@ -293,3 +293,6 @@ automated-tests:
 ## help:                              print commands help
 help	:	Makefile
 	@sed -n 's/^##//p' $<
+
+testbenchmark:
+	$(GOTEST) -bench=BenchmarkPrecomp*
