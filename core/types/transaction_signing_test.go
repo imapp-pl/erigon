@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/holiman/uint256"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/crypto"
@@ -128,7 +129,7 @@ func TestEIP155SigningVitalik(t *testing.T) {
 			continue
 		}
 
-		addr := common.HexToAddress(test.addr)
+		addr := libcommon.HexToAddress(test.addr)
 		if from != addr {
 			t.Errorf("%d: expected %x got %x", i, addr, from)
 		}
@@ -141,13 +142,7 @@ func TestChainId(t *testing.T) {
 	addr := common.HexToAddress("0x0000000000000000000000000000000000000001")
 	accesses := AccessList{{Address: addr, StorageKeys: []common.Hash{{0}}}}
 
-	var signedBlobTx Transaction = &SignedBlobTx{
-		Message: BlobTxMessage{
-			ChainID:    Uint256View(*uint256.NewInt(1)),
-			Nonce:      Uint64View(0),
-			AccessList: AccessListView(accesses),
-		},
-	}
+	var tx Transaction = NewTransaction(0, libcommon.Address{}, new(uint256.Int), 0, new(uint256.Int), nil)
 
 	testCases := []struct {
 		name string

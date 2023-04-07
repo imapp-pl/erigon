@@ -6,10 +6,12 @@ import (
 	"fmt"
 
 	"github.com/holiman/uint256"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	types2 "github.com/ledgerwatch/erigon-lib/types"
+	"github.com/valyala/fastjson"
+
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/hexutil"
-	. "github.com/protolambda/ztyp/view"
-	"github.com/valyala/fastjson"
 )
 
 // txJSON is the JSON representation of transactions.
@@ -17,28 +19,28 @@ type txJSON struct {
 	Type hexutil.Uint64 `json:"type"`
 
 	// Common transaction fields:
-	Nonce    *hexutil.Uint64 `json:"nonce"`
-	GasPrice *hexutil.Big    `json:"gasPrice"`
-	FeeCap   *hexutil.Big    `json:"maxFeePerGas"`
-	Tip      *hexutil.Big    `json:"maxPriorityFeePerGas"`
-	Gas      *hexutil.Uint64 `json:"gas"`
-	Value    *hexutil.Big    `json:"value"`
-	Data     *hexutil.Bytes  `json:"input"`
-	V        *hexutil.Big    `json:"v"`
-	R        *hexutil.Big    `json:"r"`
-	S        *hexutil.Big    `json:"s"`
-	To       *common.Address `json:"to"`
+	Nonce    *hexutil.Uint64    `json:"nonce"`
+	GasPrice *hexutil.Big       `json:"gasPrice"`
+	FeeCap   *hexutil.Big       `json:"maxFeePerGas"`
+	Tip      *hexutil.Big       `json:"maxPriorityFeePerGas"`
+	Gas      *hexutil.Uint64    `json:"gas"`
+	Value    *hexutil.Big       `json:"value"`
+	Data     *hexutil.Bytes     `json:"input"`
+	V        *hexutil.Big       `json:"v"`
+	R        *hexutil.Big       `json:"r"`
+	S        *hexutil.Big       `json:"s"`
+	To       *libcommon.Address `json:"to"`
 
 	// Access list transaction fields:
-	ChainID    *hexutil.Big `json:"chainId,omitempty"`
-	AccessList *AccessList  `json:"accessList,omitempty"`
+	ChainID    *hexutil.Big       `json:"chainId,omitempty"`
+	AccessList *types2.AccessList `json:"accessList,omitempty"`
 
 	// only  used for signedBlobTx
 	MaxFeePerDataGas    *hexutil.Big  `json:"maxFeePerDataGas,omitempty"`
 	BlobVersionedHashes []common.Hash `json:"blobVersionedHashes,omitempty"`
 
 	// Only used for encoding:
-	Hash common.Hash `json:"hash"`
+	Hash libcommon.Hash `json:"hash"`
 }
 
 func (tx LegacyTx) MarshalJSON() ([]byte, error) {
